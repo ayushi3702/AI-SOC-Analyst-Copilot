@@ -4,8 +4,8 @@ A smart assistant for security teams: it filters false alarms, investigates real
 threats like a junior analyst, and writes the report for a human to approve.
 
 This repository currently contains the CICIDS2017 data-cleaning and DuckDB
-ingestion pipeline, exploratory notebooks, and binary/family generalization
-experiments. The alert-clustering module is not implemented yet.
+ingestion pipeline, exploratory notebooks, binary/family generalization
+experiments, reusable binary model inference, and deterministic alert clustering.
 
 ## Project layout
 
@@ -28,6 +28,11 @@ ml/
   features.py                    Selects numeric model features
   splits.py                      Random, time-block, unseen-day, and family splits
   train_intrusion.py             XGBoost binary/family baseline
+  train_model.py                 Train and persist a validation-calibrated detector
+  model_artifact.py               Versioned model artifact save/load helpers
+  infer.py                        Score DuckDB events with a saved detector
+  cluster_alerts.py               Deterministic entity/time alert clustering
+  evaluate_incidents.py           Held-out event and incident evaluation
   leave_one_family_out.py        XGBoost vs Isolation Forest evaluation
   evaluate.py                    Validation-threshold alert-reduction helpers
 notebooks/
@@ -186,25 +191,137 @@ python -m ml.leave_one_family_out
 For each non-benign family, the split excludes that family from training and
 tests on its rows plus benign rows from held-out time blocks. It compares a
 supervised XGBoost classifier trained on the other attack families with an
-Isolation Forest trained on benign traffic. Recall is measured at a 1% false
-positive rate, with the threshold selected from benign test scores. Results
+Isolation Forest trained on benign traffic. The remaining training blocks are
+split again by complete time blocks into model-training and validation sets.
+Each model's threshold is selected using validation benign scores at a target
+1% false-positive rate, then held fixed while evaluating the test set. Results
 are printed and written to `evaluation/results/leave_one_family_out.csv`.
+The reported test-set FPR may differ from 1%; the target is calibrated on
+validation data, not tuned against test labels or scores.
 
-Latest recorded results (recall values rounded to three decimals):
+Latest validation-calibrated results (recall values rounded to three decimals).
+The test FPR columns are reported separately because validation calibration
+does not guarantee a 1% FPR on held-out test data:
 
-| Held-out family | Attack rows in test | XGBoost recall at 1% FPR | Isolation Forest recall at 1% FPR |
-|---|---:|---:|---:|
-| BruteForce | 13,832 | 0.289 | 0.000 |
-| DoS | 251,711 | 0.684 | 0.271 |
-| Web | 2,159 | 0.952 | 0.000 |
-| Rare | 68 | 0.441 | 0.279 |
-| PortScan | 158,804 | 0.011 | 0.000 |
-| Bot | 1,956 | 0.015 | 0.000 |
-| DDoS | 128,025 | 0.645 | 0.083 |
+| Held-out family | Attack rows in test | XGBoost recall (validation target FPR 1%) | XGBoost test FPR | Isolation Forest recall (validation target FPR 1%) | Isolation Forest test FPR |
+|---|---:|---:|---:|---:|---:|
+| BruteForce | 13,832 | 0.156 | 0.007 | 0.000 | 0.010 |
+| DoS | 251,711 | 0.669 | 0.007 | 0.383 | 0.010 |
+| Rare | 68 | 0.426 | 0.007 | 0.279 | 0.010 |
+| Web | 2,159 | 0.948 | 0.007 | 0.000 | 0.010 |
+| Bot | 1,956 | 0.017 | 0.007 | 0.000 | 0.010 |
+| PortScan | 158,804 | 0.011 | 0.010 | 0.000 | 0.010 |
+| DDoS | 128,025 | 0.645 | 0.007 | 0.099 | 0.010 |
 
-For the DDoS holdout, the exact recorded recall values are 0.6446475 for
-XGBoost and 0.0825776 for Isolation Forest. These are family-holdout
-evaluation results, distinct from the unseen-day binary results above.
+Rerun the command above to produce validation-calibrated results. The
+CSV contains the full-precision metrics, including measured test FPRs.
+
+### Reusable detector and incident clustering
+
+Train a reusable binary model. Training rows are split by complete time blocks
+into model-fit and validation portions. The threshold is calibrated from
+validation benign scores; the selected split's test data is used only for
+metrics and is never used to fit the model or threshold:
+
+```powershell
+python -m ml.train_model --split block
+```
+
+Use `--split unseen` for the Monday-Wednesday train / Thursday-Friday test.
+`--with-dst-port` runs a destination-port feature ablation; compare it to the
+default feature set on the unseen-day holdout, especially for PortScan and Bot.
+The ablation also reports held-out attack recall by family. It is an
+investigation aid, not evidence that destination port is safe from dataset
+artifacts or operational shortcuts.
+Artifacts are written to `ml/models/intrusion_binary.joblib` by default and
+contain the estimator, exact feature list, calibrated threshold, target FPR,
+validation fraction, split, and seed. The `ml/models/` directory is ignored by
+Git. Only load artifacts you trust: joblib files use Python serialization.
+
+Score the events in the read-only DuckDB store and write a Parquet file:
+
+```powershell
+python -m ml.infer
+```
+
+This writes event IDs, timestamps, source/destination IPs, model scores, and
+the alert decision using the saved validation threshold. Override the artifact,
+database, or output path with `--model`, `--db`, or `--output`.
+
+Cluster the scored alerts by source/destination pair with a five-minute
+maximum gap between consecutive alerts:
+
+```powershell
+python -m ml.cluster_alerts `
+  --input data/processed/scored_events_unseen.parquet `
+  --output data/processed/incidents_unseen_pair_gap5.parquet `
+  --entity-columns src_ip dst_ip `
+  --window-minutes 30 `
+  --max-gap-minutes 5
+```
+
+`--entity-columns` accepts one or more event columns. `--max-gap-minutes`
+starts a new incident when consecutive alerts are farther apart than that gap;
+it cannot exceed the maximum span set by `--window-minutes`. Each incident is a deterministic,
+non-overlapping group whose events share an entity and fit within the time
+window measured from that incident's first event (the window boundary is
+inclusive):
+
+```powershell
+python -m ml.cluster_alerts --input data/processed/scored_events.parquet
+```
+
+Use `--entity-columns dst_ip` to correlate on destination IP, or
+`--window-minutes 60` to change the maximum incident span. Incident records
+retain the ordered source `event_ids`, first/last timestamps, alert count, and
+maximum score. Events at or below the saved model threshold are not clustered.
+The function rejects invalid event IDs, timestamps, scores, and entity values
+instead of silently dropping alerts.
+
+Evaluate the unseen-model output offline against Thursday-Friday labels. This
+command joins labels only after scoring and restricts events to configured
+`test_days` before re-clustering, so incidents cannot span into training days:
+
+```powershell
+python -m ml.evaluate_incidents `
+  --scores data/processed/scored_events_unseen.parquet `
+  --output-dir data/processed/evaluation_unseen_pair_gap5 `
+  --entity-columns src_ip dst_ip `
+  --window-minutes 30 `
+  --max-gap-minutes 5
+```
+
+The output directory contains event metrics, per-family recall, held-out
+incidents with label-derived attack/benign counts, incident metrics, and a
+sample of larger attack-containing incidents. The labels are for offline
+evaluation only and are not inputs to inference or clustering.
+
+#### CICIDS2017 unseen-day clustering and feature ablation
+
+On the current unseen-day scores, changing from source-IP/30-minute grouping
+to source-destination/30-minute grouping with a five-minute maximum event gap
+kept event metrics unchanged, removed mixed attack/benign incidents, and
+increased the incident count from 1,216 to 3,016. Median incident size stayed
+at one alert and the largest DDoS incident remained about 71k alerts. With a
+one-minute maximum span/gap, the largest incident fell to 7,808 alerts and
+attack-containing incidents increased to 59; with a six-second limit, the
+largest was 5,084 across 3,582 incidents. CICIDS2017 timestamps are at
+minute-level resolution, so a sub-minute gap cannot split events sharing the
+same recorded timestamp. These figures show that paired entities and short
+windows reduce some over-grouping but do not fully solve burst-sized incidents.
+
+The destination-port ablation on the same unseen-day holdout changed event
+metrics as follows:
+
+| Feature set | Recall | Test FPR | PR-AUC | Bot recall | PortScan recall | DDoS recall |
+|---|---:|---:|---:|---:|---:|---:|
+| Default (no destination port) | 0.254 | 0.0131 | 0.632 | 0.000 | 0.0053 | 0.554 |
+| Include destination port | 0.295 | 0.0079 | 0.559 | 0.000 | 0.0144 | 0.636 |
+
+Destination port improves the measured recall and FPR at the calibrated
+threshold, but PR-AUC falls and Bot remains undetected. Keep this as an
+ablation, not the new default. These test results are for analysis only; do not
+select settings based on repeated tuning to the same held-out days.
 
 ## Charts and MLflow
 
@@ -234,5 +351,6 @@ The existing tests cover the CICIDS2017 normalization/cleaning behavior.
 ## Current scope
 
 The repository currently covers dataset preparation, exploratory analysis,
-baseline modelling, and offline model evaluation. `ml/cluster_alerts.py` and
-an alert-clustering workflow have not been added yet.
+baseline modelling, validation-calibrated model inference, deterministic alert
+clustering, and offline held-out incident evaluation. The investigator agents,
+approval workflow, and analyst UI remain future work.

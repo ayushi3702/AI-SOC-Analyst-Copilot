@@ -5,6 +5,42 @@ def threshold_for_recall(y_val, s_val, recall=0.95):
     y, s = np.asarray(y_val), np.asarray(s_val)
     return np.quantile(s[y == 1], 1 - recall)
 
+
+def threshold_for_fpr(y_val, s_val, fpr=0.01):
+    """Calibrate an anomaly threshold from validation benign scores only."""
+    y, s = np.asarray(y_val), np.asarray(s_val)
+    if y.shape != s.shape:
+        raise ValueError("labels and scores must have the same shape")
+    if not 0 <= fpr < 1:
+        raise ValueError("fpr must be in [0, 1)")
+    benign_scores = s[y == 0]
+    if benign_scores.size == 0:
+        raise ValueError("validation data must include benign examples")
+    return float(np.quantile(benign_scores, 1 - fpr))
+
+
+def recall_at_threshold(y_true, scores, threshold):
+    """Measure attack recall on a scored set without recalibrating its threshold."""
+    y, s = np.asarray(y_true), np.asarray(scores)
+    if y.shape != s.shape:
+        raise ValueError("labels and scores must have the same shape")
+    attacks = y == 1
+    if not attacks.any():
+        raise ValueError("evaluation data must include attack examples")
+    return float(np.mean(s[attacks] > threshold))
+
+
+def false_positive_rate_at_threshold(y_true, scores, threshold):
+    """Measure benign alert rate at a fixed, previously calibrated threshold."""
+    y, s = np.asarray(y_true), np.asarray(scores)
+    if y.shape != s.shape:
+        raise ValueError("labels and scores must have the same shape")
+    benign = y == 0
+    if not benign.any():
+        raise ValueError("evaluation data must include benign examples")
+    return float(np.mean(s[benign] > threshold))
+
+
 def alert_reduction(y_true, score, thr):
     y, s = np.asarray(y_true), np.asarray(score)
     flagged = s >= thr

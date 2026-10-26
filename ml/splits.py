@@ -1,4 +1,4 @@
-import numpy as np, pandas as pd
+import pandas as pd
 from sklearn.model_selection import train_test_split, GroupShuffleSplit
 
 def random_split(df, seed=42, test_size=0.2):
@@ -34,3 +34,15 @@ def holdout_family_split(df, family, seed=42, test_size=0.2):
     benign_te = te[(df.loc[te, "family"] == "Benign").values]
     test = benign_te.union(df.index[df["family"] == family])
     return train, test
+
+
+def train_validation_split(df, train_indices, seed=42, validation_size=0.2):
+    """Split training rows by complete time blocks, keeping validation independent."""
+    indices = pd.Index(train_indices)
+    splitter = GroupShuffleSplit(
+        n_splits=1, test_size=validation_size, random_state=seed
+    )
+    train_pos, validation_pos = next(
+        splitter.split(indices, groups=df.loc[indices, "block"])
+    )
+    return indices[train_pos], indices[validation_pos]

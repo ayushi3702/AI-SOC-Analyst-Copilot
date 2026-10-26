@@ -2,6 +2,7 @@ data/
 *.csv
 *.parquet
 *.duckdb
+ml/models/
 
 # Local virtual environments and Python bytecode
 venv/

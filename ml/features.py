@@ -1,6 +1,16 @@
-import numpy as np, pandas as pd, yaml
+import numpy as np, yaml
 
-def select_features(df, use_dst_port=None, cfg_path="configs/features.yaml"):
+
+def select_features(
+    df, use_dst_port=None, cfg_path="configs/features.yaml", feature_names=None
+):
+    if feature_names is not None:
+        missing = set(feature_names) - set(df.columns)
+        if missing:
+            raise ValueError(f"Input data is missing model features: {sorted(missing)}")
+        X = df.loc[:, feature_names].copy()
+        return X.replace([np.inf, -np.inf], np.nan).fillna(0)
+
     cfg = yaml.safe_load(open(cfg_path))
     use_port = cfg["use_dst_port"] if use_dst_port is None else use_dst_port
     drop = set(cfg["drop_columns"])
