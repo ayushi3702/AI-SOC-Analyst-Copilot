@@ -1,0 +1,13 @@
+data/
+*.csv
+*.parquet
+*.duckdb
+
+# Local virtual environments and Python bytecode
+venv/
+__pycache__/
+*.py[cod]
+
+# Local MLflow tracking database and generated evaluation charts
+mlflow.db
+evaluation/results/*.png

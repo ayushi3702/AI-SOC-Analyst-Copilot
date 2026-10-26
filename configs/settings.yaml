@@ -1,0 +1,23 @@
+db_path: data/soc.duckdb
+seed: 42
+sample_frac: 1.0            # set 0.2 while developing if RAM is tight
+block_minutes: 10           # time-block size for split B
+train_days: [Monday, Tuesday, Wednesday]   # split C
+test_days: [Thursday, Friday]
+
+families:
+  BENIGN: Benign
+  DoS Hulk: DoS
+  DoS GoldenEye: DoS
+  DoS slowloris: DoS
+  DoS Slowhttptest: DoS
+  DDoS: DDoS
+  FTP-Patator: BruteForce
+  SSH-Patator: BruteForce
+  Web Attack - Brute Force: Web
+  Web Attack - XSS: Web
+  PortScan: PortScan
+  Bot: Bot
+  Heartbleed: Rare
+  Infiltration: Rare
+  Web Attack - Sql Injection: Rare

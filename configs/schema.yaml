@@ -1,0 +1,26 @@
+# Common schema (ECS-inspired). Every data source (CICIDS2017 now, lab logs later)
+# is mapped to these names, so ML and agent code is written once.
+#
+#   left  = our common field name
+#   right = column name in the CLEANED CICIDS2017 Parquet (see ingest/clean.py)
+
+source_dataset: cicids2017
+event_type: network_flow
+
+events:                       # what the AI agents are allowed to query
+  timestamp: timestamp
+  src_ip: source_ip
+  src_port: source_port
+  dst_ip: destination_ip
+  dst_port: destination_port
+  protocol: protocol          # converted from number to name (6 -> tcp)
+  duration_us: flow_duration
+  fwd_packets: total_fwd_packets
+  bwd_packets: total_backward_packets
+  fwd_bytes: total_length_of_fwd_packets
+  bwd_bytes: total_length_of_bwd_packets
+
+protocol_names:
+  1: icmp
+  6: tcp
+  17: udp

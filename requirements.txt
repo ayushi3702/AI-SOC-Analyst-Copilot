@@ -1,0 +1,12 @@
+pandas
+numpy
+scikit-learn
+xgboost
+mlflow
+jupyters
+matplotlib
+ipykernel
+pyarrow
+duckdb
+pyyaml
+pytest

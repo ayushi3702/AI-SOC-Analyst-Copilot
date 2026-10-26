@@ -1,0 +1,2 @@
+drop_columns: [event_id, timestamp, label, is_attack, day, source_file, family, block]
+use_dst_port: false
