@@ -1,0 +1,148 @@
+{
+  "report_name": "CICIDS2017 unseen-day family and raw-label coverage",
+  "generated_at": "2026-10-27",
+  "split": {
+    "fit_days": [
+      "Monday",
+      "Tuesday",
+      "Wednesday"
+    ],
+    "validation_method": "20% of pre-test training time blocks, grouped by block",
+    "test_days": [
+      "Thursday",
+      "Friday"
+    ],
+    "seed": 42,
+    "total_rows": 2827677
+  },
+  "families": [
+    {
+      "family": "Benign",
+      "fit_rows": 1056887,
+      "validation_rows": 344040,
+      "test_rows": 870195,
+      "fit_raw_labels": [
+        "BENIGN"
+      ],
+      "validation_raw_labels": [
+        "BENIGN"
+      ],
+      "test_raw_labels": [
+        "BENIGN"
+      ],
+      "missing_from_training": false
+    },
+    {
+      "family": "Bot",
+      "fit_rows": 0,
+      "validation_rows": 0,
+      "test_rows": 1956,
+      "fit_raw_labels": [],
+      "validation_raw_labels": [],
+      "test_raw_labels": [
+        "Bot"
+      ],
+      "missing_from_training": true
+    },
+    {
+      "family": "BruteForce",
+      "fit_rows": 9681,
+      "validation_rows": 4151,
+      "test_rows": 0,
+      "fit_raw_labels": [
+        "FTP-Patator",
+        "SSH-Patator"
+      ],
+      "validation_raw_labels": [
+        "FTP-Patator",
+        "SSH-Patator"
+      ],
+      "test_raw_labels": [],
+      "missing_from_training": false
+    },
+    {
+      "family": "DDoS",
+      "fit_rows": 0,
+      "validation_rows": 0,
+      "test_rows": 128025,
+      "fit_raw_labels": [],
+      "validation_raw_labels": [],
+      "test_raw_labels": [
+        "DDoS"
+      ],
+      "missing_from_training": true
+    },
+    {
+      "family": "DoS",
+      "fit_rows": 18582,
+      "validation_rows": 233129,
+      "test_rows": 0,
+      "fit_raw_labels": [
+        "DoS Hulk",
+        "DoS Slowhttptest",
+        "DoS slowloris"
+      ],
+      "validation_raw_labels": [
+        "DoS GoldenEye",
+        "DoS Hulk",
+        "DoS slowloris"
+      ],
+      "test_raw_labels": [],
+      "missing_from_training": false
+    },
+    {
+      "family": "PortScan",
+      "fit_rows": 0,
+      "validation_rows": 0,
+      "test_rows": 158804,
+      "fit_raw_labels": [],
+      "validation_raw_labels": [],
+      "test_raw_labels": [
+        "PortScan"
+      ],
+      "missing_from_training": true
+    },
+    {
+      "family": "Rare",
+      "fit_rows": 7,
+      "validation_rows": 4,
+      "test_rows": 57,
+      "fit_raw_labels": [
+        "Heartbleed"
+      ],
+      "validation_raw_labels": [
+        "Heartbleed"
+      ],
+      "test_raw_labels": [
+        "Infiltration",
+        "Web Attack - Sql Injection"
+      ],
+      "missing_from_training": false
+    },
+    {
+      "family": "Web",
+      "fit_rows": 0,
+      "validation_rows": 0,
+      "test_rows": 2159,
+      "fit_raw_labels": [],
+      "validation_raw_labels": [],
+      "test_raw_labels": [
+        "Web Attack - Brute Force",
+        "Web Attack - XSS"
+      ],
+      "missing_from_training": true
+    }
+  ],
+  "unmapped_test_labels": [],
+  "summary": {
+    "test_attack_families": 5,
+    "attack_families_with_no_fit_examples": 4,
+    "missing_families": [
+      "Bot",
+      "DDoS",
+      "PortScan",
+      "Web"
+    ],
+    "test_attacks_in_missing_families": 290944
+  }
+}

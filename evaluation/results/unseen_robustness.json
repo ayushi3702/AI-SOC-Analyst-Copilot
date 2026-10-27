@@ -1,0 +1,138 @@
+{
+  "report_name": "Non-adaptive feature-noise robustness stress test",
+  "purpose": "Offline sensitivity measurement using random, zero-mean numeric feature noise. This does not generate network traffic or model valid protocol transformations.",
+  "method": {
+    "split": "unseen",
+    "seed": 42,
+    "perturbation": "Independent zero-mean Gaussian noise scaled by each feature's standard deviation on model-fit rows",
+    "noise_fractions": [
+      0.01,
+      0.05,
+      0.1
+    ],
+    "threshold": 0.0006896792910993099,
+    "threshold_policy": "Saved artifact threshold held fixed for all scenarios",
+    "fit_rows_for_scale": 1085157,
+    "test_rows": 1161196,
+    "feature_count": 61,
+    "batch_size": 50000,
+    "xgboost_artifact_sha256": "0c520cdcd86cf37fdb890d2f2e3ee439f5e8ebd83fd878ad10455d9bd3847fa6",
+    "limitations": [
+      "Synthetic feature corruption is not a valid-traffic simulation.",
+      "Perturbations are random and non-adaptive; no attack strategy is evaluated.",
+      "Results describe this dataset and fixed threshold, not production robustness."
+    ]
+  },
+  "clean_test_metrics": {
+    "threshold": 0.0006896792910993099,
+    "recall": 0.2537723238064474,
+    "false_positive_rate": 0.01309706445107131,
+    "precision": 0.8663030089741334,
+    "pr_auc": 0.6323430102956269,
+    "roc_auc": 0.8406617226248052,
+    "alerts": 85245,
+    "true_positives": 73848,
+    "false_positives": 11397,
+    "family_recall": {
+      "Bot": 0.0,
+      "DDoS": 0.5543526654950205,
+      "PortScan": 0.005258053953300925,
+      "Rare": 0.3333333333333333,
+      "Web": 0.937007874015748
+    }
+  },
+  "scenarios": [
+    {
+      "noise_fraction_of_fit_feature_std": 0.0,
+      "metrics": {
+        "threshold": 0.0006896792910993099,
+        "recall": 0.2537723238064474,
+        "false_positive_rate": 0.01309706445107131,
+        "precision": 0.8663030089741334,
+        "pr_auc": 0.6323430102956269,
+        "roc_auc": 0.8406617226248052,
+        "alerts": 85245,
+        "true_positives": 73848,
+        "false_positives": 11397,
+        "family_recall": {
+          "Bot": 0.0,
+          "DDoS": 0.5543526654950205,
+          "PortScan": 0.005258053953300925,
+          "Rare": 0.3333333333333333,
+          "Web": 0.937007874015748
+        }
+      },
+      "recall_change_from_clean": 0.0,
+      "pr_auc_change_from_clean": 0.0
+    },
+    {
+      "noise_fraction_of_fit_feature_std": 0.01,
+      "metrics": {
+        "threshold": 0.0006896792910993099,
+        "recall": 0.10552884697990729,
+        "false_positive_rate": 0.0636868747809399,
+        "precision": 0.3565465754856088,
+        "pr_auc": 0.28776263810980934,
+        "roc_auc": 0.5217017212193392,
+        "alerts": 86129,
+        "true_positives": 30709,
+        "false_positives": 55420,
+        "family_recall": {
+          "Bot": 0.08333333333333333,
+          "DDoS": 0.23327475102519038,
+          "PortScan": 0.0012279287675373417,
+          "Rare": 0.07017543859649122,
+          "Web": 0.22325150532654006
+        }
+      },
+      "recall_change_from_clean": -0.1482434768265401,
+      "pr_auc_change_from_clean": -0.34458037218581755
+    },
+    {
+      "noise_fraction_of_fit_feature_std": 0.05,
+      "metrics": {
+        "threshold": 0.0006896792910993099,
+        "recall": 0.10237765505960461,
+        "false_positive_rate": 0.04339142376134085,
+        "precision": 0.4410297404923687,
+        "pr_auc": 0.3177801410830862,
+        "roc_auc": 0.5557951868129387,
+        "alerts": 67551,
+        "true_positives": 29792,
+        "false_positives": 37759,
+        "family_recall": {
+          "Bot": 0.06237218813905931,
+          "DDoS": 0.1967037687951572,
+          "PortScan": 0.026686985214478223,
+          "Rare": 0.03508771929824561,
+          "Web": 0.1144048170449282
+        }
+      },
+      "recall_change_from_clean": -0.15139466874684276,
+      "pr_auc_change_from_clean": -0.3145628692125407
+    },
+    {
+      "noise_fraction_of_fit_feature_std": 0.1,
+      "metrics": {
+        "threshold": 0.0006896792910993099,
+        "recall": 0.10771097006539497,
+        "false_positive_rate": 0.03986692637857032,
+        "precision": 0.47465019080501547,
+        "pr_auc": 0.3341170492889451,
+        "roc_auc": 0.5713380929784814,
+        "alerts": 66036,
+        "true_positives": 31344,
+        "false_positives": 34692,
+        "family_recall": {
+          "Bot": 0.05828220858895705,
+          "DDoS": 0.19051747705526265,
+          "PortScan": 0.041648824966625524,
+          "Rare": 0.03508771929824561,
+          "Web": 0.1032885595182955
+        }
+      },
+      "recall_change_from_clean": -0.1460613537410524,
+      "pr_auc_change_from_clean": -0.2982259610066818
+    }
+  ]
+}

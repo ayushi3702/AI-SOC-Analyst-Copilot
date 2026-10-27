@@ -1,4 +1,4 @@
-import numpy as np, yaml
+import numpy as np, pandas as pd, yaml
 
 
 def select_features(
@@ -20,6 +20,16 @@ def select_features(
 
     X = df[cols].replace([np.inf, -np.inf], np.nan).fillna(0)
     X = X.loc[:, X.nunique() > 1]                       # constant columns
-    s = X.sample(min(len(X), 200_000), random_state=0)  # duplicate columns, on a sample
+    sample_size = min(len(X), 200_000)
+    if sample_size and "event_id" in df.columns:
+        row_hashes = pd.util.hash_pandas_object(
+            df["event_id"], index=False
+        ).to_numpy(dtype=np.uint64)
+        sample_positions = np.argpartition(row_hashes, sample_size - 1)[
+            :sample_size
+        ]
+        s = X.iloc[sample_positions]
+    else:
+        s = X.sample(sample_size, random_state=0)
     X = X.loc[:, ~s.T.duplicated()]
     return X

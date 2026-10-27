@@ -29,8 +29,11 @@ ml/
   splits.py                      Random, time-block, unseen-day, and family splits
   train_intrusion.py             XGBoost binary/family baseline
   train_model.py                 Train and persist a validation-calibrated detector
+  compare_models.py              Shared-split XGBoost vs neural-network comparison
+  robustness_report.py           Offline fixed-threshold feature-noise stress test
   model_artifact.py               Versioned model artifact save/load helpers
   infer.py                        Score DuckDB events with a saved detector
+  coverage_report.py             Family/label coverage by train/validation/test
   cluster_alerts.py               Deterministic entity/time alert clustering
   evaluate_incidents.py           Held-out event and incident evaluation
   leave_one_family_out.py        XGBoost vs Isolation Forest evaluation
@@ -40,7 +43,11 @@ notebooks/
   02_leakage_demo.ipynb          Split leakage and family-generalization charts
 evaluation/results/
   leave_one_family_out.csv       Per-family evaluation results (generated)
+  unseen_robustness.json         Fixed-threshold robustness report (generated)
   leakage_and_generalization.png Notebook chart output (generated)
+evaluation/baselines/
+  cicids2017_unseen_xgb.json     Frozen unseen-day XGBoost metrics and provenance
+  cicids2017_unseen_coverage.json Frozen split coverage snapshot
 ```
 
 ## Environment
@@ -179,6 +186,70 @@ Recent no-port binary runs recorded these attack recalls:
 The sharp drop for the unseen-day split demonstrates that strong random and
 time-block results do not imply generalization to attack types absent from
 training.
+
+### Split coverage report
+
+Report raw labels and mapped attack-family counts in the model-fit,
+validation, and held-out partitions. This uses the same unseen-day split and
+block-based validation split as model training, and forces the full dataset
+even if `sample_frac` is lowered for development:
+
+```powershell
+python -m ml.coverage_report --split unseen
+```
+
+The CSV makes it clear which attack families have zero training examples and
+lists any raw labels that have not been mapped in `configs/settings.yaml`.
+Use `--split block` to inspect the time-block holdout instead. This report
+describes data coverage; it does not claim that a family was detected or that
+the evaluation split is representative of real-world traffic.
+
+The current full-data unseen-day report and XGBoost result are preserved as
+small versioned snapshots in `evaluation/baselines/`. The trained joblib model
+and data remain local/ignored; the baseline JSON records the local artifact's
+SHA-256 so it can be identified without committing a serialized model. Treat
+these Thursday-Friday metrics as a frozen comparison, not a tuning target.
+
+#### Neural-network comparison
+
+Compare the saved, frozen XGBoost artifact to a small feed-forward neural
+network using the same fit/validation/test rows and feature list. XGBoost keeps
+its original validation-calibrated threshold; the MLP gets its own threshold
+from the shared validation partition. Both use class-balanced training weights:
+
+```powershell
+python -m ml.compare_models --split unseen
+```
+
+The default XGBoost artifact must match the SHA-256 recorded in the frozen
+baseline snapshot; comparison stops if it does not. This avoids treating a
+non-identical XGBoost retrain as the preserved baseline. The MLP standardizes
+numeric features using statistics fit only on the fit partition, sorts fit rows
+by stable event ID, and limits BLAS work to one thread during fitting to improve
+repeatability. The report
+includes recall, FPR, precision, PR-AUC, ROC-AUC, alert volume, per-family
+recall, and observed validation FPR for each model. The MLP currently uses a
+fixed 25-epoch budget and may not converge within that budget; its result is
+an initial comparison, not a tuned neural-network result. The Thursday-Friday
+test set remains a one-time comparison set. The JSON report is saved separately
+from the frozen baseline, and the MLP artifact is written under ignored
+`ml/models/`. This is an experimental comparison, not an expectation that a
+neural network will outperform XGBoost on tabular flow data.
+
+#### Controlled robustness report
+
+Measure the saved unseen-day detector's sensitivity to fixed levels of
+non-adaptive, zero-mean numeric-feature noise:
+
+```powershell
+python -m ml.robustness_report --split unseen
+```
+
+The script uses fit-partition feature scales, deterministic random noise, and
+the saved model threshold; it does not retune on test data. The report is
+written to `evaluation/results/unseen_robustness.json`. This synthetic stress
+test is not a valid-traffic or adversarial-evasion simulation and should not be
+interpreted as production robustness.
 
 ### Leave-one-family-out comparison
 
@@ -346,7 +417,9 @@ Run the current test suite from the repository root:
 python -m pytest
 ```
 
-The existing tests cover the CICIDS2017 normalization/cleaning behavior.
+The tests cover normalization, split isolation, model artifact persistence,
+inference, clustering, held-out evaluation, and a synthetic end-to-end check
+from DuckDB through saved-model scoring and incident evaluation.
 
 ## Current scope
 
