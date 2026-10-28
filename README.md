@@ -16,7 +16,9 @@ configs/
   settings.yaml                  Database, split, and family settings
 data/
   raw/cicids2017/                 Source CICIDS2017 CSV files
+  raw/lanl/                       Local authentication/red-team source files (ignored)
   interim/                       Cleaned per-capture Parquet files and report
+  processed/                      Generated model features and manifests (ignored)
   soc.duckdb                     DuckDB database (generated)
 ingest/
   clean.py                       CICIDS2017 cleanup and normalization helpers
@@ -31,6 +33,8 @@ ml/
   train_model.py                 Train and persist a validation-calibrated detector
   compare_models.py              Shared-split XGBoost vs neural-network comparison
   robustness_report.py           Offline fixed-threshold feature-noise stress test
+  prepare_login_data.py          Aggregate LANL auth logs into labeled user-hour features
+  train_login_anomaly.py         Train and evaluate LANL login anomaly detector
   model_artifact.py               Versioned model artifact save/load helpers
   infer.py                        Score DuckDB events with a saved detector
   coverage_report.py             Family/label coverage by train/validation/test
@@ -44,6 +48,7 @@ notebooks/
 evaluation/results/
   leave_one_family_out.csv       Per-family evaluation results (generated)
   unseen_robustness.json         Fixed-threshold robustness report (generated)
+  lanl_login_anomaly.json        LANL login anomaly evaluation (generated)
   leakage_and_generalization.png Notebook chart output (generated)
 evaluation/baselines/
   cicids2017_unseen_xgb.json     Frozen unseen-day XGBoost metrics and provenance
@@ -108,6 +113,61 @@ python -m ingest.to_duckdb --force
 
 `--force` deletes and recreates the selected database file. Use it only when
 you intend to replace that database.
+
+## LANL login-anomaly data
+
+The login-anomaly experiment uses LANL's [Comprehensive, Multi-Source
+Cyber-Security Events](https://csr.lanl.gov/data/cyber1/) authentication and
+red-team files (released under CC0; cite A. D. Kent, 2015, as requested on the
+dataset page). Download only `auth.txt.gz` and `redteam.txt.gz`, decompress
+them, and place the resulting plain-text files at:
+
+```text
+data/raw/lanl/auth.txt
+data/raw/lanl/redteam.txt
+```
+
+The local `data/` directory is ignored by Git; do not commit these large source
+files or generated features. The full authentication file is approximately
+73 GB uncompressed, so preprocessing is streamed in chunks and needs temporary
+disk space. Generate labeled per-user/hour features and a preprocessing
+manifest:
+
+```powershell
+python -m ml.prepare_login_data
+```
+
+The output is `data/processed/lanl_login_features.parquet`; the manifest
+records input sizes, authentication row counts, exact red-team label matches,
+and unmatched labels. Training verifies the feature Parquet SHA-256 against
+this manifest before using it. The label join key is epoch, source user, source
+computer, and destination computer. On the uploaded files, a full streaming
+audit found 1,051,430,459 authentication records and 715 unique red-team
+labels, of which 701 matched an authentication record exactly; 14 labels did
+not match and remain an explicit coverage limitation.
+
+Train and evaluate the initial Isolation Forest detector with:
+
+```powershell
+python -m ml.train_login_anomaly --n-estimators 100
+```
+
+It aggregates authentication behavior into per-user/hour examples, excludes
+red-team-labeled hours from training, uses chronological fit/validation/test
+partitions (fit before hour 216, validation before hour 360, test thereafter),
+and calibrates the alert threshold on validation benign hours at a 1% target
+false-positive rate. Test metrics use that fixed threshold. The joblib artifact
+is stored under ignored `ml/models/`, and the evaluation JSON is saved to
+`evaluation/results/lanl_login_anomaly.json`. LANL red-team events are sparse
+compromise labels, not exhaustive ground truth for every malicious login.
+LANL timestamps are relative epochs, so the cyclic hour feature captures daily
+periodicity but cannot be interpreted as local wall-clock time.
+
+Initial full-data result (100-tree Isolation Forest): on the chronological test
+period, it detected 8 of 56 red-team-labeled user-hours (14.3% recall) at a
+1.13% false-positive rate. Precision was 0.0040% because positive user-hours
+are extremely rare. Treat this as a reproducible baseline, not an operationally
+useful detector or a production performance claim.
 
 ## Exploratory analysis
 
