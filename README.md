@@ -45,6 +45,7 @@ ml/
 notebooks/
   01_explore_cicids.ipynb        Dataset cleaning and exploratory analysis
   02_leakage_demo.ipynb          Split leakage and family-generalization charts
+  03_explore_lanl.ipynb          Bounded raw-data preview and LANL feature audit
 evaluation/results/
   leave_one_family_out.csv       Per-family evaluation results (generated)
   unseen_robustness.json         Fixed-threshold robustness report (generated)
@@ -168,6 +169,13 @@ period, it detected 8 of 56 red-team-labeled user-hours (14.3% recall) at a
 1.13% false-positive rate. Precision was 0.0040% because positive user-hours
 are extremely rare. Treat this as a reproducible baseline, not an operationally
 useful detector or a production performance claim.
+
+For a bounded exploratory view of the raw labels and generated user-hour
+features, open `notebooks/03_explore_lanl.ipynb`. Its raw authentication preview
+reads only the first 100,000 rows and is not representative of the full file.
+The optional processed-feature analysis uses DuckDB to scan the generated
+Parquet data without loading it all into pandas. Run the preprocessing and
+training scripts above for the complete reproducible pipeline.
 
 ## Exploratory analysis
 
