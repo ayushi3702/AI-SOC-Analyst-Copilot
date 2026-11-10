@@ -1,0 +1,26 @@
+[
+  {
+    "reference_id": "mitre:T1046",
+    "title": "Network Service Discovery",
+    "kind": "MITRE ATT&CK Enterprise technique",
+    "citation": "MITRE ATT&CK Enterprise, T1046",
+    "source_url": "https://attack.mitre.org/techniques/T1046/",
+    "text": "Adversaries may attempt to get a listing of services running on remote hosts and local network infrastructure. Network service discovery can use port scans or other network queries. This reference describes a technique, not proof that any observed flow is malicious."
+  },
+  {
+    "reference_id": "sigma:local-port-fanout",
+    "title": "Experimental network destination port fan-out",
+    "kind": "Local Sigma-style experimental detection note",
+    "citation": "AI SOC Analyst Copilot local experimental rule",
+    "source_url": "knowledge/sigma/network_destination_port_fanout.yml",
+    "text": "Group normalized network_flow records by src_ip and dst_ip over a bounded time window. A high count of distinct dst_port values may be a network service discovery hypothesis. The count threshold is local and requires environment-specific tuning. It is not a validated production detection."
+  },
+  {
+    "reference_id": "mitre:attack-evidence-caution",
+    "title": "ATT&CK mapping caution",
+    "kind": "Project methodology",
+    "citation": "AI SOC Analyst Copilot methodology note",
+    "source_url": "knowledge/references.json",
+    "text": "ATT&CK technique mappings from network-flow telemetry are hypotheses, not confirmed activity. Flow metadata alone generally cannot establish operator intent, process identity, credential use, or a full attack chain. Cite observed evidence separately from reference knowledge."
+  }
+]

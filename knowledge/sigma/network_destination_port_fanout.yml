@@ -1,0 +1,35 @@
+title: Experimental Network Destination Port Fan-Out
+id: 14bd0c38-a57e-4d98-9c44-40c790932c5d
+status: experimental
+description: >
+  A local Sigma-style starting point for investigating unusually broad
+  destination-port fan-out. This is not a validated production rule.
+author: AI SOC Analyst Copilot
+date: 2026/11/08
+logsource:
+  category: network_traffic
+detection:
+  selection:
+    event_type: network_flow
+  condition: selection
+fields:
+  - timestamp
+  - src_ip
+  - dst_ip
+  - dst_port
+falsepositives:
+  - Approved network scanners
+  - Service discovery and inventory tools
+level: informational
+tags:
+  - attack.discovery
+  - attack.t1046
+x-local-threshold:
+  distinct_destination_ports: 10
+  grouping_fields:
+    - src_ip
+    - dst_ip
+  note: >
+    This local extension is not a portable Sigma aggregation expression.
+    Apply grouping and threshold in the consuming engine and tune for the
+    environment before operational use.

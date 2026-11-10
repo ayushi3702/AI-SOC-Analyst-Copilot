@@ -42,6 +42,21 @@ ml/
   evaluate_incidents.py           Held-out event and incident evaluation
   leave_one_family_out.py        XGBoost vs Isolation Forest evaluation
   evaluate.py                    Validation-threshold alert-reduction helpers
+agents/
+  log_hunter.py                  Bounded read-only normalized-event search
+  attack_mapping.py              Heuristic, evidence-linked ATT&CK hypotheses
+  evidence_report.py             Cited report generation and evidence verifier
+  lanl_source.py                 Read-only search over processed LANL features
+  knowledge.py                   Local ATT&CK/Sigma reference retrieval
+  response_draft.py              Human-reviewed, dry-run response proposals
+  api.py                         Loopback FastAPI for the analyst dashboard
+frontend/
+  src/                            React incident investigation dashboard
+knowledge/
+  references.json                Local cited ATT&CK/Sigma retrieval corpus
+  sigma/                          Experimental network fan-out rule
+evaluation/
+  investigation_harness.py       Offline investigation contract smoke harness
 notebooks/
   01_explore_cicids.ipynb        Dataset cleaning and exploratory analysis
   02_leakage_demo.ipynb          Split leakage and family-generalization charts
@@ -176,6 +191,152 @@ reads only the first 100,000 rows and is not representative of the full file.
 The optional processed-feature analysis uses DuckDB to scan the generated
 Parquet data without loading it all into pandas. Run the preprocessing and
 training scripts above for the complete reproducible pipeline.
+
+## AI investigation foundation
+
+The first investigation component is a constrained, read-only Log Hunter over
+the normalized DuckDB `events` table. It accepts an incident ID, an exact IP
+address, and an inclusive timestamp window; it returns bounded event records
+with stable `evidence_id` citations. Query values are parameterized, results
+are capped at 500, and the tool does not read `labels` or accept model-written
+SQL. Times must be timezone-naive to match the current CICIDS2017
+`TIMESTAMP` values.
+
+Try a search from the repository root:
+
+```powershell
+python -m agents.log_hunter `
+  --incident-id demo-001 `
+  --entity 192.168.10.5 `
+  --start 2017-03-07T08:55:00 `
+  --end 2017-03-07T09:05:00 `
+  --limit 25
+```
+
+The Log Hunter is the constrained data-access foundation for the investigation
+workflow. The LLM receives only the selected evidence and local reference
+documents; it does not receive database access or response-action tools.
+
+The network search also accepts fixed, parameterized `src_ip`, `dst_ip`,
+`source_port`, `destination_port`, and `protocol` filters. They are data values,
+not SQL fragments. The search CLI exposes the same fields.
+
+LANL search is a separate source because its time axis is a relative hour index
+and its records are per-user/hour aggregates, not raw network-flow events:
+
+```powershell
+python -c "from agents.lanl_source import LanlFeatureHunter, LoginIncidentContext; print(LanlFeatureHunter().search(LoginIncidentContext('demo-lanl', 'U748@DOM1', 200, 220), limit=50))"
+```
+
+Only the generated feature Parquet is queried; the 73 GB raw auth file is not
+scanned. The search endpoint intentionally omits the red-team label column so
+that it cannot leak evaluation ground truth into investigation results.
+
+Generate and verify an evidence-grounded report with the same search contract:
+
+```powershell
+Copy-Item .env.example .env
+# Edit .env and set GROQ_API_KEY and GROQ_MODEL.
+
+python -m agents.evidence_report `
+  --incident-id demo-001 `
+  --entity 192.168.10.5 `
+  --start 2017-03-07T08:55:00 `
+  --end 2017-03-07T09:05:00 `
+  --limit 25 `
+  --output data/processed/demo-001-report.json
+```
+
+The application loads `.env` from the repository root. Values already set in
+the process environment take precedence. `.env` is ignored by Git; commit only
+the placeholder `.env.example`, never your real API key.
+
+The report summary and claims are authored by the selected Groq-hosted model.
+Set `GROQ_MODEL` to an active model ID from
+[Groq's model list](https://console.groq.com/docs/models). Groq's
+[OpenAI-compatible chat completions API](https://console.groq.com/docs/openai)
+is called directly using Python's standard library; no API package is needed.
+The model has no database access or action tools. A second model call checks
+whether each cited statement is supported by its cited records; invalid
+citations or rejected claims fail the report instead of being silently
+accepted. This LLM verifier is a safeguard, not a formal proof or a substitute
+for analyst review. A result count equal to the limit is marked possibly
+truncated; an empty search is described as insufficient evidence, not proof
+that no activity occurred.
+
+The report also includes a separate deterministic ATT&CK hypothesis section.
+The initial rule considers only complete, untruncated network-flow results:
+when the incident entity is the source of flows to one destination on at least
+10 distinct destination ports, it proposes T1046 (Network Service Discovery)
+as a **low-confidence hypothesis**, citing the supporting event IDs and linking
+the [MITRE ATT&CK technique](https://attack.mitre.org/techniques/T1046/).
+The ten-port threshold is a project heuristic, not a MITRE requirement or a
+validated detection rule. The mapping is withheld on possibly truncated
+results and does not establish attacker intent or confirm a technique. No
+match is not evidence that no ATT&CK behavior occurred.
+
+Local ATT&CK and Sigma-style references are retrieved from
+`knowledge/references.json` using offline TF-IDF search. Reports distinguish
+these reference IDs from event evidence IDs; reference documents provide
+context but cannot establish that an event happened. The bundled
+`knowledge/sigma/network_destination_port_fanout.yml` is an experimental
+Sigma-style starting point with a local threshold extension, not a portable or
+validated production rule.
+
+The dashboard creates response drafts linked to evidence. Analysts can approve
+or reject them, but the result is recorded in ignored
+`data/processed/response_decisions.sqlite3` as a dry-run decision; **no network,
+endpoint, identity, or firewall action is executed**. Even an approved
+`simulate_block_observed_source_ip` proposal is audit-only. Do not expose the
+local API outside loopback or treat its unauthenticated demo approval screen as
+a production control plane.
+
+### Run the React + FastAPI dashboard
+
+Install backend dependencies after updating the environment:
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+In one PowerShell terminal, start the API bound to loopback:
+
+```powershell
+.\venv\Scripts\python.exe -m uvicorn agents.api:app --host 127.0.0.1 --port 8000
+```
+
+Install a current Node.js LTS release if it is not already installed. In a
+second terminal:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The dashboard includes network and LANL search,
+fixed network filters, an evidence timeline, ATT&CK hypotheses, local reference
+results, optional Groq report generation, and approval/rejection recording for
+dry-run response drafts. Keep the API bound to `127.0.0.1`; it has no user
+authentication and is intended for a local development demo.
+
+### Investigation replay smoke evaluation
+
+Run the deterministic, offline harness with:
+
+```powershell
+.\venv\Scripts\python.exe -m evaluation.investigation_harness
+```
+
+It replays synthetic supported, unsupported, unknown-citation, and
+prompt-injection cases using mocked model responses. The measurements validate
+pipeline rejection behavior only; they are not live-model quality, detection,
+or production robustness scores.
+
+**Data handling:** the selected event evidence and report prompts are sent to
+Groq for both generation and verification. Use only data approved for that
+service; do not send sensitive production telemetry. Keep the API key in the
+environment, never in source code or Git.
 
 ## Exploratory analysis
 

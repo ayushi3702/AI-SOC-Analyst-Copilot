@@ -11,3 +11,7 @@ pyarrow
 duckdb
 pyyaml
 pytest
+python-dotenv
+fastapi
+uvicorn[standard]
+httpx
