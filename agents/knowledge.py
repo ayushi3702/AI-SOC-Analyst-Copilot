@@ -9,7 +9,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CORPUS = ROOT / "knowledge" / "references.json"
+DEFAULT_STATIC_CORPUS = ROOT / "knowledge" / "references.json"
+DEFAULT_ATTACK_CORPUS = ROOT / "data" / "processed" / "mitre_attack_techniques.json"
 
 
 @dataclass(frozen=True)
@@ -26,27 +27,44 @@ class KnowledgeReference:
 class LocalKnowledgeBase:
     """Retrieve cited local documents; reference text is not incident evidence."""
 
-    def __init__(self, corpus_path=DEFAULT_CORPUS):
-        self.corpus_path = Path(corpus_path)
-        if not self.corpus_path.is_file():
-            raise FileNotFoundError(f"Knowledge corpus not found: {self.corpus_path}")
-        documents = json.loads(self.corpus_path.read_text(encoding="utf-8"))
+    def __init__(self, corpus_path=None):
+        if corpus_path is None:
+            corpus_paths = [DEFAULT_STATIC_CORPUS]
+            if DEFAULT_ATTACK_CORPUS.is_file():
+                corpus_paths.append(DEFAULT_ATTACK_CORPUS)
+        else:
+            corpus_paths = [Path(corpus_path)]
+        self.corpus_path = corpus_paths[-1]
+        documents_by_id = {}
+        for path in corpus_paths:
+            if not path.is_file():
+                raise FileNotFoundError(f"Knowledge corpus not found: {path}")
+            documents = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(documents, list) or not documents:
+                raise ValueError("Knowledge corpus must contain a non-empty JSON list")
+            source_identifiers = []
+            for document in documents:
+                if not isinstance(document, dict) or set(document) != {
+                    "reference_id",
+                    "title",
+                    "kind",
+                    "citation",
+                    "source_url",
+                    "text",
+                }:
+                    raise ValueError("Knowledge document does not match the corpus schema")
+                if any(
+                    not isinstance(document[key], str) or not document[key].strip()
+                    for key in document
+                ):
+                    raise ValueError("Knowledge document fields must be non-empty strings")
+                source_identifiers.append(document["reference_id"])
+                documents_by_id[document["reference_id"]] = document
+            if len(set(source_identifiers)) != len(source_identifiers):
+                raise ValueError("Knowledge reference IDs must be unique")
+        documents = list(documents_by_id.values())
         if not isinstance(documents, list) or not documents:
             raise ValueError("Knowledge corpus must contain a non-empty JSON list")
-        required = {
-            "reference_id",
-            "title",
-            "kind",
-            "citation",
-            "source_url",
-            "text",
-        }
-        for document in documents:
-            if not isinstance(document, dict) or set(document) != required:
-                raise ValueError("Knowledge document does not match the corpus schema")
-            if any(not isinstance(document[key], str) or not document[key].strip()
-                   for key in required):
-                raise ValueError("Knowledge document fields must be non-empty strings")
         identifiers = [document["reference_id"] for document in documents]
         if len(set(identifiers)) != len(identifiers):
             raise ValueError("Knowledge reference IDs must be unique")

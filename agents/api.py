@@ -10,9 +10,11 @@ from pydantic import BaseModel, Field
 from agents.attack_mapping import map_attack_hypotheses, serialize_mapping_result
 from agents.evidence_report import (
     GroqChatClient,
+    UnsupportedClaimError,
     generate_verified_report,
 )
 from agents.knowledge import LocalKnowledgeBase, serialize_references
+from agents.login_report import generate_login_report
 from agents.lanl_source import (
     DEFAULT_FEATURES,
     LanlFeatureHunter,
@@ -199,16 +201,16 @@ def search_lanl(request: LanlSearchRequest):
 def report_network(request: NetworkSearchRequest):
     search = _network_search(request)
     incident = _network_context(request)
-    if not search["evidence"]:
-        report = generate_verified_report(
-            incident,
-            [],
-            request.limit,
-            client=None,
-            knowledge_references=search["knowledge_references"],
-        )
-    else:
-        try:
+    try:
+        if not search["evidence"]:
+            report = generate_verified_report(
+                incident,
+                [],
+                request.limit,
+                client=None,
+                knowledge_references=search["knowledge_references"],
+            )
+        else:
             report = generate_verified_report(
                 incident,
                 [
@@ -219,10 +221,68 @@ def report_network(request: NetworkSearchRequest):
                 client=GroqChatClient(),
                 knowledge_references=search["knowledge_references"],
             )
-        except ValueError as error:
-            raise HTTPException(status_code=503, detail=str(error)) from error
+    except UnsupportedClaimError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
     search["report"] = report
     return search
+
+
+@app.post("/api/report/lanl")
+def report_lanl(request: LanlSearchRequest):
+    if request.start_hour > request.end_hour:
+        raise HTTPException(
+            status_code=400, detail="start_hour must not be after end_hour"
+        )
+    incident = {
+        "incident_id": request.incident_id,
+        "user_id": request.user_id,
+        "start_hour": request.start_hour,
+        "end_hour": request.end_hour,
+        "time_semantics": "relative hour index, not wall-clock time",
+    }
+    try:
+        evidence = LanlFeatureHunter(LANL_FEATURE_PATH).search(
+            LoginIncidentContext(
+                incident_id=request.incident_id,
+                user_id=request.user_id,
+                start_hour=request.start_hour,
+                end_hour=request.end_hour,
+            ),
+            limit=request.limit,
+        )
+        report = generate_login_report(
+            incident,
+            evidence,
+            request.limit,
+            GroqChatClient() if evidence else None,
+        )
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except UnsupportedClaimError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return {
+        **incident,
+        "source": "lanl_user_hour_features",
+        "evidence": report["evidence"],
+        "evidence_count": len(evidence),
+        "possibly_truncated": len(evidence) == request.limit,
+        "attack_mapping": {
+            "status": "not_evaluated",
+            "notice": "Current ATT&CK heuristic applies only to network flows.",
+            "hypotheses": [],
+        },
+        "knowledge_references": [],
+        "response_proposals": [],
+        "report": report,
+    }
 
 
 @app.post("/api/knowledge/search")

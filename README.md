@@ -275,13 +275,32 @@ validated detection rule. The mapping is withheld on possibly truncated
 results and does not establish attacker intent or confirm a technique. No
 match is not evidence that no ATT&CK behavior occurred.
 
-Local ATT&CK and Sigma-style references are retrieved from
-`knowledge/references.json` using offline TF-IDF search. Reports distinguish
-these reference IDs from event evidence IDs; reference documents provide
-context but cannot establish that an event happened. The bundled
+Local ATT&CK and Sigma-style references are retrieved using offline TF-IDF
+search. The bundled `knowledge/references.json` is always included. To refresh
+the Enterprise ATT&CK technique descriptions from MITRE's official STIX bundle,
+run:
+
+```powershell
+python -m knowledge.import_attack
+```
+
+The importer downloads the public Enterprise bundle (or accepts a local
+`--input` bundle), skips revoked/deprecated techniques, and writes the generated
+corpus to ignored `data/processed/mitre_attack_techniques.json`. When present,
+the imported techniques augment and replace matching entries from the bundled
+corpus; Sigma and methodology references remain available. No bundle is
+downloaded automatically. Reports distinguish reference IDs from event
+evidence IDs; reference documents provide context but cannot establish that an
+event happened. The bundled
 `knowledge/sigma/network_destination_port_fanout.yml` is an experimental
 Sigma-style starting point with a local threshold extension, not a portable or
 validated production rule.
+
+The dashboard can also draft and verify an LLM-authored report from selected
+LANL user-hour evidence. It cites the returned evidence IDs, describes hours
+only as relative indices, and never includes red-team labels. The LANL evidence
+is sent to Groq for generation and verification just like network evidence;
+use only data approved for that service.
 
 The dashboard creates response drafts linked to evidence. Analysts can approve
 or reject them, but the result is recorded in ignored
@@ -316,9 +335,10 @@ npm run dev
 
 Open `http://127.0.0.1:5173`. The dashboard includes network and LANL search,
 fixed network filters, an evidence timeline, ATT&CK hypotheses, local reference
-results, optional Groq report generation, and approval/rejection recording for
-dry-run response drafts. Keep the API bound to `127.0.0.1`; it has no user
-authentication and is intended for a local development demo.
+results, optional Groq report generation for both sources, and
+approval/rejection recording for dry-run response drafts. Keep the API bound to
+`127.0.0.1`; it has no user authentication and is intended for a local
+development demo.
 
 ### Investigation replay smoke evaluation
 

@@ -124,6 +124,55 @@ def test_lanl_search_does_not_expose_redteam_labels(
     assert body["time_semantics"] == "relative hour index, not wall-clock time"
 
 
+def test_lanl_report_is_generated_from_unlabeled_evidence(
+    tmp_path, monkeypatch
+):
+    parquet = tmp_path / "lanl.parquet"
+    _lanl_parquet(parquet, tmp_path / "source.duckdb")
+    monkeypatch.setattr(api, "LANL_FEATURE_PATH", parquet)
+
+    class FakeClient:
+        model = "test-model"
+
+        def __init__(self):
+            self.responses = [
+                {
+                    "summary": "Four authentication events occurred in relative hour 12.",
+                    "summary_evidence_ids": ["lanl:U1:12"],
+                    "claims": [{
+                        "statement": "One authentication event failed.",
+                        "evidence_ids": ["lanl:U1:12"],
+                    }],
+                },
+                {"summary_supported": True, "claims_supported": [True]},
+            ]
+            self.payloads = []
+
+        def complete_json(self, system_prompt, payload):
+            self.payloads.append(payload)
+            return self.responses.pop(0)
+
+    client = FakeClient()
+    monkeypatch.setattr(api, "GroqChatClient", lambda: client)
+    response = TestClient(api.app).post("/api/report/lanl", json={
+        "incident_id": "i1",
+        "user_id": "U1",
+        "start_hour": 12,
+        "end_hour": 12,
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["report"]["verification"]["verified"] is True
+    assert body["report"]["claims"][0]["evidence_ids"] == ["lanl:U1:12"]
+    assert "redteam_event_count" not in body["evidence"][0]
+    assert all(
+        "redteam_event_count" not in record
+        for payload in client.payloads
+        for record in payload.get("evidence", [])
+    )
+
+
 def test_network_report_uses_references_and_returns_verified_llm_report(
     tmp_path, monkeypatch
 ):

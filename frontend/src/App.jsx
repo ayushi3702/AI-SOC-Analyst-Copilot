@@ -146,7 +146,19 @@ function App() {
     setBusy(true);
     setError("");
     try {
-      const body = await postJson("/api/report/network", networkPayload());
+      const payload = source === "network"
+        ? networkPayload()
+        : {
+            incident_id: form.incident_id,
+            user_id: form.user_id,
+            start_hour: Number(form.start_hour),
+            end_hour: Number(form.end_hour),
+            limit: Number(form.limit),
+          };
+      const body = await postJson(
+        source === "network" ? "/api/report/network" : "/api/report/lanl",
+        payload,
+      );
       setResult(body);
       setReport(body.report);
     } catch (requestError) {
@@ -278,11 +290,9 @@ function App() {
           <button className="button button-primary full-width" onClick={search} disabled={busy}>
             Search read-only evidence
           </button>
-          {source === "network" && (
-            <button className="button button-outline full-width" onClick={generateReport} disabled={busy || !events.length}>
-              Generate Groq investigation report
-            </button>
-          )}
+          <button className="button button-outline full-width" onClick={generateReport} disabled={busy}>
+            Generate Groq investigation report
+          </button>
           <p className="field-note">Search is read-only. Report generation sends selected evidence to Groq.</p>
         </aside>
 
@@ -350,12 +360,13 @@ function App() {
 
               {report && (
                 <section className="panel report-panel">
-                  <div className="panel-title"><div><p className="eyebrow">LLM-ASSISTED</p><h2>Investigation report</h2></div><span className="status-tag">{report.verification?.verified ? "verified by model" : "not verified"}</span></div>
-                  <p>{report.summary}</p>
+                  <div className="panel-title"><div><p className="eyebrow">LLM-ASSISTED</p><h2>Investigation report</h2></div><span className="status-tag">{report.status === "insufficient_evidence" ? "insufficient evidence" : report.verification?.verified ? "verified by model" : "not verified"}</span></div>
+                  {report.summary ? <p>{report.summary}</p> : <p className="empty-state">No matching evidence was available to draft a report.</p>}
+                  {report.time_limitation && <p className="field-note">{report.time_limitation}</p>}
                   <div className="reference-list">{report.summary_evidence_ids?.map((id) => <code key={id}>{id}</code>)}</div>
                   {report.summary_reference_ids?.length > 0 && <div className="reference-list">{report.summary_reference_ids.map((id) => <code key={id}>{id}</code>)}</div>}
                   {report.claims?.map((claim, index) => (
-                    <article className="claim-card" key={index}><p>{claim.statement}</p><div className="reference-list">{claim.evidence_ids.map((id) => <code key={id}>{id}</code>)}{claim.reference_ids?.map((id) => <code key={id}>{id}</code>)}</div></article>
+                    <article className="claim-card" key={index}><p>{claim.statement}</p><div className="reference-list">{claim.evidence_ids?.map((id) => <code key={id}>{id}</code>)}{claim.reference_ids?.map((id) => <code key={id}>{id}</code>)}</div></article>
                   ))}
                   <p className="field-note">Model verification is a safeguard, not a formal proof. Analyst review is required.</p>
                 </section>
